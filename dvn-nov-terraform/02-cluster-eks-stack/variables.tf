@@ -12,7 +12,7 @@ variable "assume_role" {
     region = string
   })
   default = {
-    arn    = "<YOUR_ASSUME_ROLE_ARN>"
+    arn    = "arn:aws:iam::654654554686:role/workshop-nov-role"
     region = "us-east-1"
   }
 }
@@ -43,4 +43,20 @@ variable "eks_cluster" {
     node_group_scaling_config_max_size     = 2
     node_group_scaling_config_min_size     = 2
   }
+}
+
+variable "ecr_repositories" {
+  type = list(object({
+    name                 = string
+    image_tag_mutability = string
+  }))
+
+  default = [{
+    name                 = "dvn-nov-workshop/production/frontend"
+    image_tag_mutability = "MUTABLE"
+  },
+  {
+    name                 = "dvn-nov-workshop/production/backend"
+    image_tag_mutability = "MUTABLE"
+  }]
 }
