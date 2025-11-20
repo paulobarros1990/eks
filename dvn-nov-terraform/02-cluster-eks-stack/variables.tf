@@ -12,7 +12,7 @@ variable "assume_role" {
     region = string
   })
   default = {
-    arn    = "arn:aws:iam::654654554686:role/workshop-nov-role"
+    arn    = "arn:aws:iam::649795374786:role/WorkshopDevOpsNaNuvemRole"
     region = "us-east-1"
   }
 }

@@ -12,7 +12,7 @@ variable "assume_role" {
     region = string
   })
   default = {
-    arn    = "<YOUR_ASSUME_ROLE_ARN>"
+    arn    = "arn:aws:iam::649795374786:role/WorkshopDevOpsNaNuvemRole"
     region = "us-east-1"
   }
 }
@@ -27,7 +27,7 @@ variable "remote_backend" {
   })
 
   default = {
-    bucket_name                = "workshop-nov-remote-backend-bucket"
+    bucket_name                = "workshop-nov-remote-backend-bucket-paulo"
     dynamo_table_name          = "workshop-nov-state-locking-table"
     dynamo_table_billing_mode  = "PAY_PER_REQUEST"
     dynamo_table_hash_key      = "LockID"

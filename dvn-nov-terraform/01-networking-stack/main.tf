@@ -7,11 +7,11 @@ terraform {
   }
 
   backend "s3" {
-    bucket       = "workshop-nov-remote-backend-bucket"
-    key          = "networking/terraform.tfstate"
-    region       = "us-east-1"
-    use_lockfile = true
-    # dynamodb_table = "workshop-nov-state-locking-table"
+    bucket = "workshop-nov-remote-backend-bucket-paulo"
+    key    = "networking/terraform.tfstate"
+    region = "us-east-1"
+    #use_lockfile = true
+    dynamodb_table = "workshop-nov-state-locking-table"
   }
 }
 
