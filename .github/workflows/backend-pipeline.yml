@@ -1,57 +1,83 @@
+# Nome da pipeline exibido no GitHub Actions
 name: Backend Pipeline
 
+# Eventos que disparam essa pipeline
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Permite rodar manualmente no GitHub Actions
   push:
     branches:
-    - main
+      - main          # Dispara quando houver push na branch main
     paths:
-    - 'dvn-nov-apps/backend/**'
-env:
-  BACKEND_REPOSITORY: dvn-nov-workshop/production/backend
-  IMAGE_TAG: ${{ github.sha }}
+      - 'dvn-nov-apps/backend/**'  # Só dispara se arquivos do backend forem alterados
 
+# Variáveis de ambiente globais da pipeline
+env:
+  BACKEND_REPOSITORY: dvn-nov-workshop/production/backend  # Caminho do repositório no ECR
+  IMAGE_TAG: ${{ github.sha }}  # Tag da imagem igual ao hash do commit
+
+# Permissões para GitHub Actions acessar recursos
 permissions:
-  contents: read
-  id-token: write
-  
+  contents: read     # Permite ler repositório
+  id-token: write    # Necessário para autenticação OIDC com AWS
+
 jobs:
   backend-job:
     name: Backend Job
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Runner será uma máquina Ubuntu virtual
 
     steps:
+
+    # 1. Checkout do código do repositório atual
     - uses: actions/checkout@v4
 
+    # 2. Configura credenciais da AWS usando OIDC
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v5.1.0
       with:
         aws-region: us-east-1
         role-to-assume: arn:aws:iam::649795374786:role/workshop-nov-eks-github-role 
+        # Assume a role no EKS para poder autenticar no ECR e executar comandos
 
+    # 3. Faz login no Amazon ECR
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
+      # Output principal aqui é "registry", usado depois no build/push da imagem
 
+    # 4. Constrói e envia a imagem Docker para o ECR
     - name: Build, tag, and push docker image to Amazon ECR
       env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        REGISTRY: ${{ steps.login-ecr.outputs.registry }}  # ex: 649795374786.dkr.ecr.us-east-1.amazonaws.com
       run: |
-          docker build -f ./dvn-nov-apps/backend/YoutubeLiveApp/Dockerfile -t $REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG ./dvn-nov-apps/backend/YoutubeLiveApp
-          docker push $REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG
+        # Build da imagem Docker
+        docker build \
+          -f ./dvn-nov-apps/backend/YoutubeLiveApp/Dockerfile \
+          -t $REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG \
+          ./dvn-nov-apps/backend/YoutubeLiveApp
 
+        # Upload da imagem para o repositório ECR
+        docker push $REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG
+
+    # 5. Checkout do repositório GitOps para atualizar a imagem
     - uses: actions/checkout@v5
       with:
-        repository: paulobarros1990/gitops
-        token: ${{ secrets.PAT }}
+        repository: paulobarros1990/gitops  # Repositório GitOps
+        token: ${{ secrets.PAT }}           # Token armazenado nos secrets
 
+    # 6. Atualiza o Kustomize com a nova imagem + envia commit automático
     - name: Kustomize Edit Set Image
       env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
-          kustomize edit set image $REGISTRY/$BACKEND_REPOSITORY=$REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ./kustomization.yml
-          git commit -m "[BOT] Updated Image to $REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG"
-          git push
+        # Atualiza a imagem no arquivo kustomization.yml
+        kustomize edit set image \
+          $REGISTRY/$BACKEND_REPOSITORY=$REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG
+
+        # Configura o commit do BOT
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        # Commit e push das alterações no repositório GitOps
+        git add ./kustomization.yml
+        git commit -m "[BOT] Updated Image to $REGISTRY/$BACKEND_REPOSITORY:$IMAGE_TAG"
+        git push
