@@ -1,57 +1,83 @@
+# Nome exibido na lista de pipelines do GitHub Actions
 name: Frontend Pipeline
 
+# Eventos que disparam essa pipeline
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # Permite executar manualmente no GitHub Actions
   push:
     branches:
-    - main
+      - main           # Só dispara quando houver push para a branch main
     paths:
-    - 'dvn-nov-apps/frontend/**'
-env:
-  FRONTEND_REPOSITORY: dvn-nov-workshop/production/frontend
-  IMAGE_TAG: ${{ github.sha }}
+      - 'dvn-nov-apps/frontend/**'   # Só dispara se arquivos dentro dessa pasta forem alterados
 
+# Variáveis de ambiente globais do pipeline
+env:
+  FRONTEND_REPOSITORY: dvn-nov-workshop/production/frontend  # Nome do repositório no ECR
+  IMAGE_TAG: ${{ github.sha }}  # Tag da imagem baseada no hash do commit
+
+# Permissões que esse workflow possui dentro do GitHub
 permissions:
-  contents: read
-  id-token: write
-  
+  contents: read     # Permite ler o repositório
+  id-token: write    # Necessário para autenticação OIDC com AWS STS
+
 jobs:
   frontend-job:
     name: Frontend Job
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Máquina runner utilizada (Ubuntu)
 
     steps:
+
+    # 1. Baixa o código do repositório atual
     - uses: actions/checkout@v4
 
+    # 2. Configura credenciais AWS via OIDC
     - name: Configure AWS Credentials
       uses: aws-actions/configure-aws-credentials@v5.1.0
       with:
         aws-region: us-east-1
-        role-to-assume: arn:aws:iam::649795374786:role/workshop-nov-eks-github-role 
+        role-to-assume: arn:aws:iam::649795374786:role/workshop-nov-eks-github-role  
+        # Assume uma role IAM com permissões para ECR, EKS e STS
 
+    # 3. Login no Amazon ECR
     - name: Login to Amazon ECR
       id: login-ecr
       uses: aws-actions/amazon-ecr-login@v2
+      # Esse step retorna o output "registry" com o endereço do ECR
 
+    # 4. Build da imagem Docker + push para o repositório Amazon ECR
     - name: Build, tag, and push docker image to Amazon ECR
       env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        REGISTRY: ${{ steps.login-ecr.outputs.registry }}  # Ex: 649795374786.dkr.ecr.us-east-1.amazonaws.com
       run: |
-          docker build -f ./dvn-nov-apps/frontend/youtube-live-app/Dockerfile -t $REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG ./dvn-nov-apps/frontend/youtube-live-app
-          docker push $REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG
+        # Build da imagem Docker usando o Dockerfile do frontend
+        docker build \
+          -f ./dvn-nov-apps/frontend/youtube-live-app/Dockerfile \
+          -t $REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG \
+          ./dvn-nov-apps/frontend/youtube-live-app
+        
+        # Envia a imagem construída para o repositório ECR
+        docker push $REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG
 
+    # 5. Checkout do repositório GitOps para atualizar a imagem via Kustomize
     - uses: actions/checkout@v5
       with:
-        repository: paulobarros1990/gitops
-        token: ${{ secrets.PAT }}
+        repository: paulobarros1990/gitops    # Repositório GitOps
+        token: ${{ secrets.PAT }}             # Personal Access Token armazenado nos secrets
 
+    # 6. Atualiza o arquivo kustomization.yml com a nova imagem e envia commit automatizado
     - name: Kustomize Edit Set Image
       env:
-          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        REGISTRY: ${{ steps.login-ecr.outputs.registry }}
       run: |
-          kustomize edit set image $REGISTRY/$FRONTEND_REPOSITORY=$REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add ./kustomization.yml
-          git commit -m "[BOT] Updated Image to $REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG"
-          git push
+        # Atualiza a referência da imagem dentro do kustomization.yml
+        kustomize edit set image \
+          $REGISTRY/$FRONTEND_REPOSITORY=$REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG
+
+        # Configura o usuário para commit automático do GitHub Actions
+        git config user.name "github-actions[bot]"
+        git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+        # Commit e push das alterações
+        git add ./kustomization.yml
+        git commit -m "[BOT] Updated Image to $REGISTRY/$FRONTEND_REPOSITORY:$IMAGE_TAG"
+        git push
